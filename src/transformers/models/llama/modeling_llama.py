@@ -70,6 +70,21 @@ def _get_unpad_data(attention_mask):
         max_seqlen_in_batch,
     )
 
+def prepare_fa2_from_position_ids(query, key, value, position_ids, query_length):
+    query = query.view(-1, query.size(-2), query.size(-1))
+    key = key.view(-1, key.size(-2), key.size(-1))
+    value = value.view(-1, value.size(-2), value.size(-1))
+    position_ids = position_ids.flatten()
+    indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+    cu_seq_lens = torch.cat((
+        indices_q[position_ids==0],
+        torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32)
+        ))
+    max_length = position_ids.max()+1
+    return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
+    
+def unflatten(attn_output, indices_q, batch_size, query_length):
+    return attn_output.view(batch_size, -1, attn_output.size(-2), attn_output.size(-1))
 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -464,7 +479,7 @@ class LlamaFlashAttention2(LlamaAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate, position_ids=position_ids
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -476,7 +491,7 @@ class LlamaFlashAttention2(LlamaAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None, position_ids=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -496,6 +511,8 @@ class LlamaFlashAttention2(LlamaAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Used for to compute cu_seqlen when attention_mask is 4D
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
@@ -505,9 +522,22 @@ class LlamaFlashAttention2(LlamaAttention):
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
+            if attention_mask.dim()==2:
+                flatten_func = self._upad_input
+                reshape_func = pad_input
+                mask_or_posid = attention_mask
+            elif attention_mask.dim()==4:
+                # NOTE: for packing only
+                logger.warning_once("Using packing with FA2!")
+                flatten_func = prepare_fa2_from_position_ids
+                reshape_func = unflatten
+                mask_or_posid = position_ids
+            else:
+                raise NotImplementedError
+            
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = flatten_func(
+                query_states, key_states, value_states, mask_or_posid, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -525,8 +555,7 @@ class LlamaFlashAttention2(LlamaAttention):
                 softmax_scale=softmax_scale,
                 causal=causal,
             )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+            attn_output = reshape_func(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
                 query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal

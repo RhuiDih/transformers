@@ -47,6 +47,7 @@ from ...utils import (
 )
 from .configuration_olmo import OlmoConfig
 
+from ..llama.modeling_llama import prepare_fa2_from_position_ids, unflatten
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -434,7 +435,7 @@ class OlmoFlashAttention2(OlmoAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate, position_ids=position_ids
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -447,7 +448,7 @@ class OlmoFlashAttention2(OlmoAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with Llama->Olmo
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None, position_ids=None,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -467,6 +468,8 @@ class OlmoFlashAttention2(OlmoAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Used for to compute cu_seqlen when attention_mask is 4D
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
@@ -476,9 +479,22 @@ class OlmoFlashAttention2(OlmoAttention):
 
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
+            if attention_mask.dim()==2:
+                flatten_func = self._upad_input
+                reshape_func = pad_input
+                mask_or_posid = attention_mask
+            elif attention_mask.dim()==4:
+                # NOTE: for packing only
+                logger.warning_once("Using packing with FA2!")
+                flatten_func = prepare_fa2_from_position_ids
+                reshape_func = unflatten
+                mask_or_posid = position_ids
+            else:
+                raise NotImplementedError
+            
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = flatten_func(
+                query_states, key_states, value_states, mask_or_posid, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -497,7 +513,7 @@ class OlmoFlashAttention2(OlmoAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+            attn_output = reshape_func(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
                 query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
