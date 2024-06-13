@@ -557,6 +557,8 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.moellama": ["MoeLlamaConfig"],
+    "models.moemistral": ["MoeMistralConfig"],
     "models.mpnet": [
         "MPNetConfig",
         "MPNetTokenizer",
@@ -2595,6 +2597,12 @@ else:
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
         ]
+    )
+    _import_structure["models.moellama"].extend(
+        ["MoeLlamaForCausalLM"]
+    )
+    _import_structure["models.moemistral"].extend(
+        ["MoeMistralForCausalLM"]
     )
     _import_structure["models.mpnet"].extend(
         [
@@ -5161,6 +5169,12 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.moellama import (
+        MoeLlamaConfig,
+    )
+    from .models.moemistral import (
+        MoeMistralConfig,
+    )
     from .models.mpnet import (
         MPNetConfig,
         MPNetTokenizer,
@@ -6972,6 +6986,10 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.moe import (
+            MoeLlamaForCausalLM,
+            MoeMistralForCausalLM,
         )
         from .models.mpnet import (
             MPNetForMaskedLM,
