@@ -511,7 +511,7 @@ class LlamaFlashAttention2(LlamaAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Used == to compute cu_seqlen
+                Used to compute cu_seqlen
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal

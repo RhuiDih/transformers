@@ -465,7 +465,7 @@ class MistralFlashAttention2(MistralAttention):
             use_sliding_windows (`bool`, *optional*):
                 Whether to activate sliding window attention.
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Used == to compute cu_seqlen
+                Used to compute cu_seqlen
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
