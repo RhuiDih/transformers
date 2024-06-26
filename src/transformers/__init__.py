@@ -104,6 +104,7 @@ _import_structure = {
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
         "DataCollatorWithPadding",
+        "DataCollatorWithFlattening",
         "DefaultDataCollator",
         "default_data_collator",
     ],
@@ -4692,6 +4693,7 @@ if TYPE_CHECKING:
         DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
+        DataCollatorWithFlattening,
         DefaultDataCollator,
         default_data_collator,
     )
