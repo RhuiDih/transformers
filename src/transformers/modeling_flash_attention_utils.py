@@ -19,8 +19,9 @@ from typing import Optional, Tuple
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available
+from .utils import is_flash_attn_2_available, logging
 
+logger = logging.get_logger(__name__)
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -262,6 +263,7 @@ def _flash_attention_forward(
     # if position_ids is provided and check not all examples (row) contain only 1 sequence,
     # then use `flash_attn_varlen_func` to prevent cross-example attention and also allow padding free approach
     elif position_ids is not None and not (position_ids[:,-1]==position_ids.size(1)-1).all():
+        logger.warning_once("Using padding free FA2...")
         batch_size = query_states.size(0)
         query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = prepare_fa2_from_position_ids(
             query_states, key_states, value_states, position_ids
