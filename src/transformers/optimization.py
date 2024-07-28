@@ -386,6 +386,15 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     )
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+def get_steplr_schedule(
+    optimizer: Optimizer,
+    step_size,
+    gamma,
+    num_warmup_steps=None,
+    num_training_steps=None,
+):
+    from torch.optim.lr_scheduler import StepLR
+    return StepLR(optimizer, step_size, gamma)
 
 def _get_wsd_scheduler_lambda(
     current_step: int,
@@ -465,6 +474,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
     SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
+    SchedulerType.STEPLR: get_steplr_schedule,
 }
 
 
