@@ -1622,14 +1622,24 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
     """
 
-    def __init__(self, *args, return_position_ids=True, **kwargs):
+    def __init__(self, *args, return_position_ids=True, goldfish_prob=0., **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
+        self.goldfish_prob = goldfish_prob
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
             "Make sure your attention computation is able to handle it!"
         )
 
+    def goldfish_mask(self, labels:List[int]):
+        if self.goldfish_prob > 0.:
+            mask = np.random.rand(len(labels)) > self.goldfish
+            labels_arr = np.array(labels, dtype=np.longlong)
+            labels_arr[~mask] = -100
+            return labels_arr.tolist()
+        else:
+            return labels
+        
     def __call__(self, features, return_tensors=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
@@ -1640,9 +1650,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         for idx in range(0, len(features)):
             ret["input_ids"] += features[idx]["input_ids"]
             if is_labels_provided:
-                ret["labels"] += [-100] + features[idx]["labels"][1:]
+                ret["labels"] += [-100] + self.goldfish_mask(features[idx]["labels"][1:])
             else:
-                ret["labels"] += [-100] + features[idx]["input_ids"][1:]
+                ret["labels"] += [-100] + self.goldfish_mask(features[idx]["input_ids"][1:])
             if self.return_position_ids:
                 ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
         return default_data_collator([ret], return_tensors)
