@@ -1633,7 +1633,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
 
     def goldfish_mask(self, labels:List[int]):
         if self.goldfish_prob > 0.:
-            mask = np.random.rand(len(labels)) > self.goldfish
+            mask = np.random.rand(len(labels)) > self.goldfish_prob
             labels_arr = np.array(labels, dtype=np.longlong)
             labels_arr[~mask] = -100
             return labels_arr.tolist()
